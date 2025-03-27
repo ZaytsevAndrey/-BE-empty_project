@@ -20,4 +20,28 @@ export class UsersService {
         const user = this.usersRepository.create({ username, password: hashedPassword });
         return this.usersRepository.save(user);
     }
+
+    async findById(id: number): Promise<User | null> {
+        return this.usersRepository.findOne({ where: { id } });
+    }
+
+    async updatePassword(userId: number, newPassword: string): Promise<void> {
+        const hashed = await bcrypt.hash(newPassword, 10);
+        await this.usersRepository.update({ id: userId }, { password: hashed });
+    }
+
+    async setRefreshToken(userId: number, token: string): Promise<void> {
+        await this.usersRepository.update({ id: userId }, { refreshToken: token });
+    }
+
+    async getUserIfRefreshTokenMatches(userId: number, token: string): Promise<User | null> {
+        const user = await this.usersRepository.findOne({ where: { id: userId } });
+        if (!user || user.refreshToken !== token) return null;
+        return user;
+    }
+
+    async removeRefreshToken(userId: number): Promise<void> {
+        await this.usersRepository.update({ id: userId }, { refreshToken: null });
+    }
+
 }

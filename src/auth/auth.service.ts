@@ -2,6 +2,9 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { UsersService } from '../users/users.service';
+import * as jwt from 'jsonwebtoken';
+import { User } from '../users/user.entity';
+
 
 @Injectable()
 export class AuthService {
@@ -19,10 +22,14 @@ export class AuthService {
         throw new UnauthorizedException('Invalid credentials');
     }
 
-    async login(user: any) {
+    async login(user: User) {
         const payload = { username: user.username, sub: user.id };
-        return {
-            access_token: this.jwtService.sign(payload),
-        };
+
+        const access_token = jwt.sign(payload, process.env.JWT_SECRET!, { expiresIn: '15m' });
+        const refresh_token = jwt.sign(payload, process.env.JWT_SECRET!, { expiresIn: '7d' });
+
+        await this.usersService.setRefreshToken(user.id, refresh_token);
+
+        return { access_token, refresh_token };
     }
 }
