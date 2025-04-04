@@ -11,6 +11,6 @@ export class User {
     @Column()
     password: string;
 
-    @Column({ nullable: true }) // 🔥 нове поле
-    refreshToken?: string;
+    @Column({ nullable: true, type: 'text' })
+    refreshToken: string | null;
 }
