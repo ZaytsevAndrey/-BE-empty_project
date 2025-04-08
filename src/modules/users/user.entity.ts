@@ -5,12 +5,18 @@ export class User {
     @PrimaryGeneratedColumn()
     id: number;
 
-    @Column({ unique: true })
+    @Column({ nullable: true, unique: true })
     username: string;
+
+    @Column({ unique: true })
+    email: string;
 
     @Column()
     password: string;
 
     @Column({ nullable: true, type: 'text' })
     refreshToken: string | null;
+
+    @Column({ default: false })
+    isEmailVerified: boolean;
 }
