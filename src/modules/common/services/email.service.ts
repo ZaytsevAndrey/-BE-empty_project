@@ -9,6 +9,7 @@ export class EmailService {
     private readonly logger = new Logger(EmailService.name);
 
     constructor() {
+        this.logger.log('Initializing EmailService');
         this.transporter = nodemailer.createTransport({
             service: 'gmail',
             auth: {
@@ -16,6 +17,7 @@ export class EmailService {
                 pass: process.env.EMAIL_PASS,
             },
         });
+        this.logger.log('EmailService initialized');
     }
 
     async sendEmail(to: string, subject: string, text: string) {
@@ -25,6 +27,8 @@ export class EmailService {
             subject,
             text,
         };
+
+        this.logger.log(`Attempting to send email to ${to} with subject: ${subject}`);
 
         try {
             await this.transporter.sendMail(mailOptions);

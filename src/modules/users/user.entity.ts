@@ -15,6 +15,9 @@ export class User {
     password: string;
 
     @Column({ nullable: true, type: 'text' })
+    resetToken: string | null;
+
+    @Column({ nullable: true, type: 'text' })
     refreshToken: string | null;
 
     @Column({ default: false })

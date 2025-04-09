@@ -2,6 +2,9 @@ import { Injectable } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, UpdateResult } from 'typeorm';
+import { randomBytes } from 'crypto';
+import { JwtService } from '@nestjs/jwt';
+import { Req } from '@nestjs/common';
 
 import { User } from '../users/user.entity';
 import { RegisterDto } from './dto/register.dto';
@@ -17,6 +20,7 @@ export class AuthService {
         @InjectRepository(User)
         private readonly usersRepo: Repository<User>,
         private readonly emailService: EmailService,
+        private readonly jwtService: JwtService,
     ) {}
 
     async registerUser(dto: RegisterDto): Promise<void> {
@@ -45,7 +49,6 @@ export class AuthService {
 
         await this.usersRepo.save(user);
 
-        // Send welcome email
         await this.emailService.sendEmail(email, 'Welcome!', 'Thank you for registering!');
     }
 
@@ -85,8 +88,10 @@ export class AuthService {
         const hashedPassword = await bcrypt.hash(newPassword, 10);
         await this.updatePassword(user.id, hashedPassword);
 
-        // Send password reset confirmation email
-        await this.emailService.sendEmail(user.email, 'Password Reset', 'Your password has been reset successfully.');
+        user.resetToken = null;
+        await this.usersRepo.save(user);
+
+        this.emailService.sendEmail(user.email, 'Password Reset', 'Your password has been reset successfully.');
     }
 
     async generateAndSendCode(email: string): Promise<void> {
@@ -109,12 +114,17 @@ export class AuthService {
         }
 
         const resetToken = this.generateResetToken();
-        await this.sendPasswordResetEmail(user.email, resetToken);
+        user.resetToken = resetToken;
+        await this.usersRepo.save(user);
+
+        this.sendPasswordResetEmail(user.email, resetToken);
     }
 
     private createTokenPair(userId: number): { access_token: string; refresh_token: string } {
-        // Логіка для створення токенів
-        return { access_token: 'access_token', refresh_token: 'refresh_token' };
+        const payload = { sub: userId };
+        const access_token = this.jwtService.sign(payload, { expiresIn: '15m' });
+        const refresh_token = this.jwtService.sign(payload, { expiresIn: '7d' });
+        return { access_token, refresh_token };
     }
 
     private async setRefreshToken(userId: number, token: string): Promise<void> {
@@ -127,8 +137,7 @@ export class AuthService {
     }
 
     private async getUserByResetToken(token: string): Promise<User | null> {
-        // Логіка для отримання користувача за токеном скидання
-        return null;
+        return this.usersRepo.findOne({ where: { resetToken: token } });
     }
 
     private generateVerificationCode(): string {
@@ -141,16 +150,24 @@ export class AuthService {
     }
 
     private generateResetToken(): string {
-        // Логіка для генерації токену скидання
-        return 'reset_token';
+        return randomBytes(32).toString('hex');
     }
 
     private async sendPasswordResetEmail(email: string, token: string): Promise<void> {
-        // Логіка для відправки електронного листа з інструкціями для скидання паролю
+        const resetLink = `${process.env.APP_URL}/reset-password?token=${token}`;
+        const subject = 'Password Reset Instructions';
+        const text = `To reset your password, please click the following link: ${resetLink}`;
+
+        await this.emailService.sendEmail(email, subject, text);
     }
 
     async updatePassword(userId: number, newPassword: string): Promise<UpdateResult> {
-        const hashedPassword = await bcrypt.hash(newPassword, 10);
-        return this.usersRepo.update({ id: userId }, { password: hashedPassword });
+        return this.usersRepo.update({ id: userId }, { password: newPassword });
+    }
+
+    async logout(userId: number): Promise<void> {
+        console.log(`Logging out user with ID: ${userId}`);
+        await this.usersRepo.update({ id: userId }, { refreshToken: null });
+        console.log(`User with ID: ${userId} logged out successfully`);
     }
 }

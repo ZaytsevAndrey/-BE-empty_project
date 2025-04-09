@@ -6,6 +6,7 @@ import {
     HttpStatus,
     Post,
     Logger,
+    Req,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
@@ -14,6 +15,7 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ApiError } from '../common/types/errors';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
+import { JwtService } from '@nestjs/jwt';
 
 const ERROR_CODES = {
     WRONG_PASSWORD_ERROR: 800,
@@ -32,8 +34,24 @@ const ERROR_CODES = {
 export class AuthController {
     private readonly logger = new Logger(AuthController.name);
 
-    constructor(private readonly authService: AuthService) {}
+    constructor(
+        private readonly authService: AuthService,
+        private readonly jwtService: JwtService,
+    ) {}
 
+    private extractUserIdFromRequest(req): number {
+        const authHeader = req.headers.authorization;
+        if (!authHeader) {
+            throw new Error('Authorization header missing');
+        }
+        const token = authHeader.split(' ')[1];
+        const payload = this.jwtService.verify(token);
+        return payload.sub;
+    }
+
+    @ApiOperation({ summary: 'Register a new user' })
+    @ApiBody({ schema: { example: { email: 'user@example.com', password: 'password123', confirmPassword: 'password123' } } })
+    @ApiResponse({ status: 201, description: 'User registered successfully' })
     @Post('register')
     @HttpCode(HttpStatus.CREATED)
     async register(@Body() registerDto: RegisterDto) {
@@ -59,8 +77,8 @@ export class AuthController {
     }
 
     @ApiOperation({ summary: 'User login' })
-    @ApiResponse({ status: 200, description: 'Successful login', schema: { example: { access_token: 'string', refresh_token: 'string' } } })
     @ApiBody({ schema: { example: { username: 'user@example.com', password: 'password123' } } })
+    @ApiResponse({ status: 200, description: 'Successful login', schema: { example: { access_token: 'string', refresh_token: 'string' } } })
     @Post('login')
     @HttpCode(HttpStatus.OK)
     async login(@Body() loginDto: LoginDto) {
@@ -70,9 +88,9 @@ export class AuthController {
         return tokens;
     }
 
-    @ApiOperation({ summary: 'Refresh token' })
+    @ApiOperation({ summary: 'Refresh tokens' })
+    @ApiBody({ schema: { example: { refreshToken: 'string' } } })
     @ApiResponse({ status: 200, description: 'Tokens refreshed', schema: { example: { access_token: 'string', refresh_token: 'string' } } })
-    @ApiBody({ schema: { example: { refresh_token: 'string' } } })
     @Post('refresh')
     @HttpCode(HttpStatus.OK)
     async refreshToken(@Body('refresh_token') refreshToken: string) {
@@ -82,6 +100,9 @@ export class AuthController {
         return tokens;
     }
 
+    @ApiOperation({ summary: 'Reset password' })
+    @ApiBody({ schema: { example: { token: 'reset_token', newPassword: 'newPassword123' } } })
+    @ApiResponse({ status: 200, description: 'Password reset successful' })
     @Post('reset-password')
     @HttpCode(HttpStatus.OK)
     async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
@@ -96,10 +117,25 @@ export class AuthController {
         return { message: 'Verification code sent' };
     }
 
+    @ApiOperation({ summary: 'Forgot password' })
+    @ApiBody({ schema: { example: { email: 'user@example.com' } } })
+    @ApiResponse({ status: 200, description: 'Password reset instructions sent' })
     @Post('forgot-password')
     @HttpCode(HttpStatus.OK)
     async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
+        this.logger.log(`Forgot password request received: ${JSON.stringify(forgotPasswordDto)}`);
         await this.authService.sendPasswordResetInstructions(forgotPasswordDto);
+        this.logger.log('Password reset instructions sent');
         return { message: 'Password reset instructions sent' };
+    }
+
+    @ApiOperation({ summary: 'Logout user' })
+    @ApiResponse({ status: 200, description: 'User logged out successfully' })
+    @Post('logout')
+    @HttpCode(HttpStatus.OK)
+    async logout(@Req() req) {
+        const userId = this.extractUserIdFromRequest(req);
+        await this.authService.logout(userId);
+        return { message: 'User logged out successfully' };
     }
 }
